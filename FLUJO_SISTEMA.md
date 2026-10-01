@@ -1,5 +1,64 @@
 # Flujo del Sistema - Línea 61
 
+## Flujo Implementado para Presentación
+
+La implementación actual utiliza ambos backends con responsabilidades separadas:
+
+```mermaid
+sequenceDiagram
+    participant Usuario
+    participant App as App Flutter
+    participant Web as Laravel / Laragon
+    participant Dart as ApiDart
+    participant DB as MySQL linea61
+
+    Usuario->>App: Ingresa email y contraseña
+    App->>Web: POST /api/login
+    Web->>DB: Valida usuario y crea token Sanctum
+    DB-->>Web: Usuario válido
+    Web-->>App: access_token y datos del usuario
+    App->>Web: GET/POST/PUT/DELETE de catálogos
+    Web->>DB: Consulta o modifica datos
+    DB-->>Web: Resultado
+    Web-->>App: Respuesta JSON
+    App->>Dart: GET/POST /api/asignaciones
+    Dart->>DB: Consulta o crea la asignación
+    DB-->>Dart: Resultado
+    Dart-->>App: Asignación JSON
+    Usuario->>App: Inicia turno
+    App->>Dart: POST /api/asignaciones/{id}/iniciar
+    Dart->>DB: Actualiza estado del turno
+    loop Durante el recorrido
+        App->>Dart: POST /api/mis/asignaciones/{id}/ubicaciones
+        Dart->>DB: Guarda seguimiento_gps
+        DB-->>Dart: Confirmación
+        Dart-->>App: Punto GPS guardado
+    end
+    App->>Dart: POST /api/mis/ubicaciones/sincronizar
+    Dart->>DB: Guarda puntos offline pendientes
+    Usuario->>App: Finaliza turno
+    App->>Dart: POST /api/asignaciones/{id}/finalizar
+    Dart->>DB: Cierra el turno
+```
+
+### Servicios y puertos
+
+| Servicio | URL de desarrollo | Responsabilidad |
+| --- | --- | --- |
+| Laravel en Laragon | `http://10.0.2.2/api` | Login, permisos y catálogos |
+| ApiDart | `http://10.0.2.2:8000/api` | Asignaciones, inicio/finalización y GPS |
+| MySQL | `127.0.0.1:3306` | Base de datos compartida `linea61` |
+
+En el emulador Android, `10.0.2.2` representa al PC anfitrión. La app envía el encabezado `Host: linea57_control.test` para que Apache de Laragon seleccione el virtual host de Laravel.
+
+### Archivos principales involucrados
+
+- App: `lib/services/api_service.dart`, `lib/providers/auth_provider.dart` y `lib/providers/asignacion_turno_provider.dart`.
+- Laravel: `routes/api.php` y `app/Http/Controllers/Api/AuthController.php`.
+- ApiDart: `bin/server.dart`, `lib/routes/routes_auth.dart`, `lib/routes/routes_asignacion_turno.dart`, `lib/routes/routes_conductor_endpoints.dart` y los servicios de GPS.
+
+El login se realiza contra Laravel. ApiDart también conserva un endpoint de login compatible para pruebas directas, pero no es el flujo utilizado por la app móvil.
+
 ## Arquitectura General
 
 ```

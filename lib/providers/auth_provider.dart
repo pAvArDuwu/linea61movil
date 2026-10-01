@@ -14,6 +14,14 @@ class AuthProvider with ChangeNotifier {
   String? get error => _error;
   bool get isLoading => _isLoading;
 
+  bool get isAdmin {
+    final roles = _user?['roles'];
+    if (roles is List) {
+      return roles.any((role) => role is Map && role['name'] == 'admin');
+    }
+    return _user?['role'] == 'admin';
+  }
+
   Future<bool> login(String email, String password) async {
     _error = null;
     _isLoading = true;

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/asignacion_turno_provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../models/asignacion_turno.dart';
 import '../../widgets/app_theme.dart';
 import '../../widgets/app_drawer.dart';
+import 'asignacion_turno_form_screen.dart';
 import 'turno_activo_screen.dart';
 
 class AsignacionTurnoListScreen extends StatefulWidget {
@@ -23,9 +23,20 @@ class _AsignacionTurnoListScreenState extends State<AsignacionTurnoListScreen> {
   }
 
   void _loadData() async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
     final prov = Provider.of<AsignacionTurnoProvider>(context, listen: false);
-    await prov.fetchMisAsignaciones();
-    await prov.fetchMiAsignacionActual();
+    if (auth.isAdmin) {
+      await prov.fetchAll();
+    } else {
+      final conductor = auth.user?['conductor'];
+      final conductorId = conductor is Map ? int.tryParse(conductor['id'].toString()) : null;
+      if (conductorId != null) {
+        await prov.fetchMisAsignaciones(conductorId: conductorId);
+        await prov.fetchMiAsignacionActual(conductorId: conductorId);
+      } else {
+        prov.setError('El usuario no tiene un conductor asociado');
+      }
+    }
   }
 
   Color _getEstadoColor(String? estado) {
@@ -49,6 +60,7 @@ class _AsignacionTurnoListScreenState extends State<AsignacionTurnoListScreen> {
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
     final isConductor = auth.user != null && auth.user!['conductor'] != null;
+    final isAdmin = auth.isAdmin;
 
     return Scaffold(
       appBar: AppBar(
@@ -60,6 +72,19 @@ class _AsignacionTurnoListScreenState extends State<AsignacionTurnoListScreen> {
           ],
         ),
       ),
+      floatingActionButton: isAdmin
+          ? FloatingActionButton.extended(
+              onPressed: () async {
+                final created = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AsignacionTurnoFormScreen()),
+                );
+                if (created == true && mounted) _loadData();
+              },
+              icon: const Icon(Icons.add),
+              label: const Text('Nueva asignación'),
+            )
+          : null,
       drawer: const AppDrawer(currentRoute: '/asignacion-turnos'),
       body: Consumer<AsignacionTurnoProvider>(
         builder: (context, prov, _) {

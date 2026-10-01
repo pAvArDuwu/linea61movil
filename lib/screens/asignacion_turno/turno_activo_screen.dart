@@ -17,6 +17,7 @@ class TurnoActivoScreen extends StatefulWidget {
 class _TurnoActivoScreenState extends State<TurnoActivoScreen> {
   Timer? _gpsTimer;
   bool _enviandoGps = false;
+  bool _enviandoPunto = false;
   int _puntosEnviados = 0;
   String? _ultimoReporte;
 
@@ -37,7 +38,7 @@ class _TurnoActivoScreenState extends State<TurnoActivoScreen> {
 
   void _iniciarEnvioGps() {
     setState(() => _enviandoGps = true);
-    // Envío periódico de GPS cada 10 segundos
+    _reportarUbicacion();
     _gpsTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       _reportarUbicacion();
     });
@@ -45,10 +46,12 @@ class _TurnoActivoScreenState extends State<TurnoActivoScreen> {
 
   void _detenerEnvioGps() {
     _gpsTimer?.cancel();
-    setState(() => _enviandoGps = false);
+    if (mounted) setState(() => _enviandoGps = false);
   }
 
   Future<void> _reportarUbicacion() async {
+    if (!_enviandoGps || _enviandoPunto) return;
+    _enviandoPunto = true;
     final prov = Provider.of<AsignacionTurnoProvider>(context, listen: false);
     
     // Coordenadas de prueba basadas en la parada de la ruta
@@ -79,6 +82,7 @@ class _TurnoActivoScreenState extends State<TurnoActivoScreen> {
         );
       }
     }
+    _enviandoPunto = false;
   }
 
   @override
@@ -209,15 +213,69 @@ class _TurnoActivoScreenState extends State<TurnoActivoScreen> {
                     Text('Última transmisión: $_ultimoReporte', style: const TextStyle(fontSize: 12, color: AppTheme.muted)),
                   ],
                   const SizedBox(height: 12),
-                  SizedBox(
+                  Container(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _reportarUbicacion(),
-                      icon: const Icon(Icons.send_rounded, size: 18),
-                      label: const Text('Enviar Posición GPS Ahora'),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _enviandoGps ? Colors.green.shade50 : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _enviandoGps ? Icons.sync : Icons.pause_circle_outline,
+                          size: 18,
+                          color: _enviandoGps ? Colors.green.shade700 : Colors.grey.shade700,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _enviandoGps
+                                ? 'La ubicación se transmite automáticamente cada 10 segundos.'
+                                : 'La transmisión GPS está pausada.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _enviandoGps ? Colors.green.shade800 : Colors.grey.shade700,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () async {
+                  final confirmar = await showDialog<bool>(
+                    context: context,
+                    builder: (dialogContext) => AlertDialog(
+                      title: const Text('Finalizar turno'),
+                      content: const Text('¿Desea cerrar este turno? Se detendrá el envío GPS.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancelar')),
+                        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Finalizar')),
+                      ],
+                    ),
+                  );
+                  if (confirmar != true || !mounted) return;
+                  final ok = await context.read<AsignacionTurnoProvider>().finalizarTurno(a.id!);
+                  if (!mounted) return;
+                  if (ok) {
+                    _detenerEnvioGps();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Turno finalizado correctamente'), backgroundColor: Colors.green),
+                    );
+                    Navigator.pop(context);
+                  }
+                },
+                icon: const Icon(Icons.stop_circle_outlined),
+                label: const Text('Finalizar turno'),
+                style: OutlinedButton.styleFrom(foregroundColor: Colors.red.shade700),
               ),
             ),
             const SizedBox(height: 20),
